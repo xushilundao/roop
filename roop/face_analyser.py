@@ -5,6 +5,7 @@ import numpy
 
 import roop.globals
 from roop.typing import Frame, Face
+from roop.utilities import ensure_onnxruntime_cuda_dependencies
 
 FACE_ANALYSER = None
 THREAD_LOCK = threading.Lock()
@@ -15,8 +16,11 @@ def get_face_analyser() -> Any:
 
     with THREAD_LOCK:
         if FACE_ANALYSER is None:
-            FACE_ANALYSER = insightface.app.FaceAnalysis(name='buffalo_l', providers=roop.globals.execution_providers)
-            FACE_ANALYSER.prepare(ctx_id=0)
+            ensure_onnxruntime_cuda_dependencies()
+            providers = roop.globals.execution_providers or None
+            FACE_ANALYSER = insightface.app.FaceAnalysis(name='buffalo_l', providers=providers)
+            ctx_id = 0 if 'CUDAExecutionProvider' in (roop.globals.execution_providers or []) else -1
+            FACE_ANALYSER.prepare(ctx_id=ctx_id)
     return FACE_ANALYSER
 
 

@@ -2,3 +2,8 @@
 models
 temp
 __pycache__
+
+outputs/
+vids/
+sources/
+

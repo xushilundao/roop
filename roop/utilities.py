@@ -6,14 +6,17 @@ import shutil
 import ssl
 import subprocess
 import urllib
+import importlib
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Any
 from tqdm import tqdm
 
 import roop.globals
 
 TEMP_DIRECTORY = 'temp'
 TEMP_VIDEO_FILE = 'temp.mp4'
+
+DLL_HANDLES: List[Any] = []
 
 # monkey patch ssl for mac
 if platform.system().lower() == 'darwin':
@@ -63,6 +66,9 @@ def create_video(target_path: str, fps: float = 30) -> bool:
 
 def restore_audio(target_path: str, output_path: str) -> None:
     temp_output_path = get_temp_output_path(target_path)
+    output_directory = os.path.dirname(output_path)
+    if output_directory:
+        os.makedirs(output_directory, exist_ok=True)
     done = run_ffmpeg(['-i', temp_output_path, '-i', target_path, '-c:v', 'copy', '-map', '0:v:0', '-map', '1:a:0', '-y', output_path])
     if not done:
         move_temp(target_path, output_path)
@@ -101,6 +107,9 @@ def create_temp(target_path: str) -> None:
 def move_temp(target_path: str, output_path: str) -> None:
     temp_output_path = get_temp_output_path(target_path)
     if os.path.isfile(temp_output_path):
+        output_directory = os.path.dirname(output_path)
+        if output_directory:
+            os.makedirs(output_directory, exist_ok=True)
         if os.path.isfile(output_path):
             os.remove(output_path)
         shutil.move(temp_output_path, output_path)
@@ -147,3 +156,58 @@ def conditional_download(download_directory_path: str, urls: List[str]) -> None:
 
 def resolve_relative_path(path: str) -> str:
     return os.path.abspath(os.path.join(os.path.dirname(__file__), path))
+
+
+def _add_windows_dll_directory(directory: Path, added_paths: set[str]) -> None:
+    path_str = str(directory)
+    if path_str in added_paths:
+        return
+    added_paths.add(path_str)
+    try:
+        handle = os.add_dll_directory(path_str)
+        DLL_HANDLES.append(handle)
+    except Exception:
+        pass
+    os.environ['PATH'] = path_str + os.pathsep + os.environ.get('PATH', '')
+
+
+def ensure_onnxruntime_cuda_dependencies() -> None:
+    if platform.system().lower() != 'windows':
+        return
+    added_paths = set()
+    try:
+        import torch  # type: ignore
+    except Exception:
+        torch = None  # type: ignore
+    if torch:
+        torch_lib_path = Path(torch.__file__).resolve().parent / 'lib'
+        if torch_lib_path.exists():
+            _add_windows_dll_directory(torch_lib_path, added_paths)
+    try:
+        nvidia_pkg = importlib.import_module('nvidia')  # type: ignore
+    except Exception:
+        nvidia_pkg = None
+    if nvidia_pkg:
+        nvidia_root = Path(nvidia_pkg.__file__).resolve().parent
+        provider_dir = None
+        try:
+            ort_module = importlib.import_module('onnxruntime')  # type: ignore
+            provider_dir = Path(ort_module.__file__).resolve().parent / 'capi'
+        except Exception:
+            provider_dir = None
+        for bin_directory in nvidia_root.glob('*/bin'):
+            if bin_directory.is_dir():
+                _add_windows_dll_directory(bin_directory, added_paths)
+                if provider_dir and provider_dir.exists():
+                    for dll_file in bin_directory.glob('*.dll'):
+                        target_path = provider_dir / dll_file.name
+                        if not target_path.exists():
+                            try:
+                                shutil.copy2(dll_file, target_path)
+                            except Exception:
+                                pass
+        cuda_runtime_root = nvidia_root / 'cuda_runtime'
+        if cuda_runtime_root.exists():
+            os.environ['CUDA_PATH'] = str(cuda_runtime_root)
+
+

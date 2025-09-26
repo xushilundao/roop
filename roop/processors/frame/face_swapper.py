@@ -9,7 +9,7 @@ from roop.core import update_status
 from roop.face_analyser import get_one_face, get_many_faces, find_similar_face
 from roop.face_reference import get_face_reference, set_face_reference, clear_face_reference
 from roop.typing import Face, Frame
-from roop.utilities import conditional_download, resolve_relative_path, is_image, is_video
+from roop.utilities import conditional_download, resolve_relative_path, is_image, is_video, ensure_onnxruntime_cuda_dependencies
 
 FACE_SWAPPER = None
 THREAD_LOCK = threading.Lock()
@@ -21,6 +21,7 @@ def get_face_swapper() -> Any:
 
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
+            ensure_onnxruntime_cuda_dependencies()
             model_path = resolve_relative_path('../models/inswapper_128.onnx')
             FACE_SWAPPER = insightface.model_zoo.get_model(model_path, providers=roop.globals.execution_providers)
     return FACE_SWAPPER

@@ -1,6 +1,6 @@
 import threading
 import numpy
-import opennsfw2
+# import opennsfw2   # 已禁用
 from PIL import Image
 from keras import Model
 
@@ -12,32 +12,39 @@ MAX_PROBABILITY = 0.85
 
 
 def get_predictor() -> Model:
-    global PREDICTOR
-
-    with THREAD_LOCK:
-        if PREDICTOR is None:
-            PREDICTOR = opennsfw2.make_open_nsfw_model()
-    return PREDICTOR
+    """
+    原本返回 opennsfw2 模型，现在直接返回 None。
+    """
+    return None
 
 
 def clear_predictor() -> None:
+    """
+    清空 predictor，这里什么也不做。
+    """
     global PREDICTOR
-
     PREDICTOR = None
 
 
 def predict_frame(target_frame: Frame) -> bool:
-    image = Image.fromarray(target_frame)
-    image = opennsfw2.preprocess_image(image, opennsfw2.Preprocessing.YAHOO)
-    views = numpy.expand_dims(image, axis=0)
-    _, probability = get_predictor().predict(views)[0]
-    return probability > MAX_PROBABILITY
+    """
+    原本检测单帧是否 NSFW。
+    现在始终返回 False（即不过滤）。
+    """
+    return False
 
 
 def predict_image(target_path: str) -> bool:
-    return opennsfw2.predict_image(target_path) > MAX_PROBABILITY
+    """
+    原本检测单张图片。
+    现在始终返回 False。
+    """
+    return False
 
 
 def predict_video(target_path: str) -> bool:
-    _, probabilities = opennsfw2.predict_video_frames(video_path=target_path, frame_interval=100)
-    return any(probability > MAX_PROBABILITY for probability in probabilities)
+    """
+    原本检测视频。
+    现在始终返回 False。
+    """
+    return False
